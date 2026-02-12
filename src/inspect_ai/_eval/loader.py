@@ -659,10 +659,16 @@ def parse_spec_str(spec_str: str) -> Tuple[Path | None, str | None]:
     if spec_split[1] is not None:
         file: Path | None = Path(spec_split[0]).resolve()
         name: str | None = spec_split[1]
-    elif Path(spec_split[0]).exists():
-        file = Path(spec_split[0]).resolve()
-        name = None
     else:
-        file = None
-        name = spec_split[0]
+        maybe_file = Path(spec_split[0])
+        if (
+            maybe_file.exists()
+            and maybe_file.is_file()
+            and maybe_file.suffix in [".py", ".ipynb"]
+        ):
+            file = maybe_file.resolve()
+            name = None
+        else:
+            file = None
+            name = spec_split[0]
     return file, name

@@ -11,6 +11,7 @@ title: "inspect_ai.scorer"
 ### choice
 ### f1
 ### exact
+### comet
 ### gleu
 ### model_graded_qa
 ### model_graded_fact

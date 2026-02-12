@@ -44,6 +44,7 @@ class HFScorer(BaseModel):
         "answer",
         "exact",
         "f1",
+        "comet",
         "gleu",
         "model_graded_qa",
         "model_graded_fact",
