@@ -401,13 +401,15 @@ A dataset's `eval.yaml` file defines a list of tasks. Here are the fields that c
 +-------------------+----------------+--------------------------------+
 | `shuffle_choices` | None           | `dataset.shuffle_choices()`    |
 +-------------------+----------------+--------------------------------+
+| `filters`         | None           | row filtering (pre-sample)     |
++-------------------+----------------+--------------------------------+
 | `epochs`          | 1              | `Epochs(epochs)`               |
 +-------------------+----------------+--------------------------------+
 | `epoch_reducer`   | "mean"         | `Epochs(epoch_reducer)`        |
 +-------------------+----------------+--------------------------------+
 | `solvers`         | None           | `Task(solver)`                 |
 +-------------------+----------------+--------------------------------+
-| `scorer`          | None           | `Task(scorer)`                 |
+| `scorers`         | None           | `Task(scorer)`                 |
 +-------------------+----------------+--------------------------------+
 | `id`              | None           | `hf/org/dataset/name`          |
 +-------------------+----------------+--------------------------------+
@@ -417,6 +419,24 @@ A dataset's `eval.yaml` file defines a list of tasks. Here are the fields that c
     - A literal value, specified as `literal:<value>`, where `<value>` will be used directly as the target.
     - A field name corresponding to a letter, or an integer; in this case, the integer (e.g., 0, 1, 2) will be mapped to a letter (`A`, `B`, `C`, etc.) for use as the target.
 - `field_spec.input_image` is an optional field name for multimodal tasks. When specified, it should reference a field containing image data as a data URI (base64 encoded). The image will be combined with the text input to create a multimodal chat message. For example:
+- `filters` are applied to raw dataset rows before mapping them to samples (so they can reference any source column). Supported operators: `eq`, `ne`, `in`, `not_in`, `gt`, `gte`, `lt`, `lte`, `between`, `is_null`, `not_null`, `exists`, `contains`, and `not_contains`.
+- `filters` can be composed with `all`, `any`, and `not`. For example, include only rows where `include=true`:
+
+```yaml
+tasks:
+  - id: main
+    field_spec:
+      input: question
+      target: answer
+    filters:
+      column: include
+      op: eq
+      value: true
+    solvers:
+      - name: generate
+    scorers:
+      - name: exact
+```
 
 ### Multiple Tasks
 

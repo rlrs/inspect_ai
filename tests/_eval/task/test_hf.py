@@ -3,9 +3,11 @@ from pydantic import ValidationError
 
 from inspect_ai._eval.task.hf import (
     HFFieldSpec,
+    HFFilter,
     HFScorer,
     HFSolver,
     HFTask,
+    _record_matches_filter,
     _record_to_sample_hf,
     _sanitize_choices,
     _sanitize_target,
@@ -172,6 +174,96 @@ def test_hf_scorer_invalid_name():
         HFScorer(name="invalid_scorer")
 
 
+# --- HFFilter validation + evaluation tests ---
+
+
+def test_hf_filter_valid_condition():
+    filter = HFFilter.model_validate({"column": "include", "op": "eq", "value": True})
+    assert filter.column == "include"
+    assert filter.op == "eq"
+    assert filter.value is True
+
+
+def test_hf_filter_valid_logical_group():
+    filter = HFFilter.model_validate(
+        {
+            "all": [
+                {"column": "include", "op": "eq", "value": True},
+                {"column": "difficulty", "op": "in", "value": ["hard", "very_hard"]},
+            ]
+        }
+    )
+    assert filter.all is not None
+    assert len(filter.all) == 2
+
+
+def test_hf_filter_invalid_mixed_group_and_condition():
+    with pytest.raises(
+        ValidationError,
+        match="cannot combine logical keys",
+    ):
+        HFFilter.model_validate(
+            {"all": [{"column": "include", "op": "eq", "value": True}], "column": "x"}
+        )
+
+
+def test_hf_filter_invalid_missing_value_for_eq():
+    with pytest.raises(ValidationError, match="requires a 'value'"):
+        HFFilter.model_validate({"column": "include", "op": "eq"})
+
+
+def test_hf_filter_invalid_value_for_unary_op():
+    with pytest.raises(ValidationError, match="does not accept a 'value'"):
+        HFFilter.model_validate({"column": "include", "op": "exists", "value": True})
+
+
+def test_hf_filter_invalid_between_value_shape():
+    with pytest.raises(ValidationError, match="2-item list or tuple"):
+        HFFilter.model_validate({"column": "score", "op": "between", "value": [1]})
+
+
+def test_record_matches_filter_simple_eq():
+    filter = HFFilter.model_validate({"column": "include", "op": "eq", "value": True})
+    assert _record_matches_filter({"include": True}, filter) is True
+    assert _record_matches_filter({"include": False}, filter) is False
+
+
+def test_record_matches_filter_all_any_not():
+    filter = HFFilter.model_validate(
+        {
+            "all": [
+                {"column": "include", "op": "eq", "value": True},
+                {
+                    "any": [
+                        {"column": "difficulty", "op": "eq", "value": "hard"},
+                        {"column": "difficulty", "op": "eq", "value": "very_hard"},
+                    ]
+                },
+                {"not": {"column": "exclude", "op": "eq", "value": True}},
+            ]
+        }
+    )
+
+    assert (
+        _record_matches_filter(
+            {"include": True, "difficulty": "hard", "exclude": False}, filter
+        )
+        is True
+    )
+    assert (
+        _record_matches_filter(
+            {"include": True, "difficulty": "easy", "exclude": False}, filter
+        )
+        is False
+    )
+    assert (
+        _record_matches_filter(
+            {"include": True, "difficulty": "hard", "exclude": True}, filter
+        )
+        is False
+    )
+
+
 # --- HFTask validation tests ---
 
 
@@ -216,6 +308,15 @@ def test_hf_task_valid_full():
     assert task.epoch_reducer == "mode"
     assert len(task.solvers) == 2
     assert len(task.scorers) == 1
+
+
+def test_hf_task_with_filters():
+    config = _valid_task_config()
+    config["filters"] = {"column": "include", "op": "eq", "value": True}
+    task = HFTask.model_validate(config)
+    assert task.filters is not None
+    assert task.filters.column == "include"
+    assert task.filters.op == "eq"
 
 
 def test_hf_task_missing_solvers():

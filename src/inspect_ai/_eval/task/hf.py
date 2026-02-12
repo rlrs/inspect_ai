@@ -4,7 +4,7 @@ from string import ascii_uppercase
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from inspect_ai._eval.task import Task
 from inspect_ai._eval.task.epochs import Epochs
@@ -67,6 +67,95 @@ HFEpochReducer = Annotated[
 ]
 
 
+HFFilterOp = Literal[
+    "eq",
+    "ne",
+    "in",
+    "not_in",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "between",
+    "is_null",
+    "not_null",
+    "exists",
+    "contains",
+    "not_contains",
+]
+
+
+class HFFilter(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    all: list["HFFilter"] | None = Field(default=None)
+    any: list["HFFilter"] | None = Field(default=None)
+    not_: "HFFilter | None" = Field(default=None, alias="not")
+
+    column: str | None = Field(default=None)
+    op: HFFilterOp | None = Field(default=None)
+    value: Any = Field(default=None)
+
+    @model_validator(mode="after")
+    def validate_filter(self) -> "HFFilter":
+        # either a logical group (all/any/not) or a condition (column/op/value)
+        has_group = any([self.all is not None, self.any is not None, self.not_ is not None])
+        has_condition = any(
+            [self.column is not None, self.op is not None, self.value is not None]
+        )
+        if has_group and has_condition:
+            raise ValueError(
+                "Filter cannot combine logical keys ('all', 'any', 'not') "
+                "with condition keys ('column', 'op', 'value')."
+            )
+        if not has_group and not has_condition:
+            raise ValueError(
+                "Filter must specify either a logical key ('all', 'any', 'not') "
+                "or a condition ('column', 'op')."
+            )
+
+        if has_group:
+            group_count = sum(
+                [self.all is not None, self.any is not None, self.not_ is not None]
+            )
+            if group_count != 1:
+                raise ValueError("Filter group must specify exactly one of 'all', 'any', or 'not'.")
+            if self.all is not None and len(self.all) == 0:
+                raise ValueError("'all' filter must include at least one child filter.")
+            if self.any is not None and len(self.any) == 0:
+                raise ValueError("'any' filter must include at least one child filter.")
+            return self
+
+        if self.column is None or self.op is None:
+            raise ValueError("Condition filter requires both 'column' and 'op'.")
+
+        unary_ops = {"is_null", "not_null", "exists"}
+        if self.op in unary_ops:
+            if self.value is not None:
+                raise ValueError(f"Filter op '{self.op}' does not accept a 'value'.")
+            return self
+
+        if self.value is None:
+            raise ValueError(f"Filter op '{self.op}' requires a 'value'.")
+
+        if self.op in {"in", "not_in"} and not isinstance(self.value, (list, tuple, set)):
+            raise ValueError(f"Filter op '{self.op}' requires a list, tuple, or set value.")
+
+        if self.op == "between":
+            if (
+                not isinstance(self.value, (list, tuple))
+                or len(self.value) != 2
+            ):
+                raise ValueError(
+                    "Filter op 'between' requires a 2-item list or tuple value."
+                )
+
+        return self
+
+
+HFFilter.model_rebuild()
+
+
 class HFTask(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -75,6 +164,7 @@ class HFTask(BaseModel):
     split: str = Field(default="test")
     field_spec: HFFieldSpec
     shuffle_choices: bool | None = Field(default=None)
+    filters: HFFilter | None = Field(default=None)
     epochs: int = Field(default=1, ge=1)
     epoch_reducer: HFEpochReducer | None = Field(default=None)
     solvers: list[HFSolver] = Field(min_length=1)
@@ -143,8 +233,12 @@ def task_create_from_hf(task_name: str, **kwargs: Any) -> list[Task]:
             continue
 
         def record_to_sample_hf(
-            record: DatasetRecord, field_spec: HFFieldSpec = hf_task.field_spec
-        ) -> Sample:
+            record: DatasetRecord,
+            field_spec: HFFieldSpec = hf_task.field_spec,
+            filters: HFFilter | None = hf_task.filters,
+        ) -> Sample | list[Sample]:
+            if filters is not None and not _record_matches_filter(record, filters):
+                return []
             return _record_to_sample_hf(record, field_spec)
 
         # create dataset
@@ -243,6 +337,82 @@ def _sanitize_choices(
         return [record[choice] for choice in choices]
     else:
         return record[choices]
+
+
+_MISSING = object()
+
+
+def _record_matches_filter(record: DatasetRecord, filter: HFFilter) -> bool:
+    if filter.all is not None:
+        return all(_record_matches_filter(record, f) for f in filter.all)
+    if filter.any is not None:
+        return any(_record_matches_filter(record, f) for f in filter.any)
+    if filter.not_ is not None:
+        return not _record_matches_filter(record, filter.not_)
+
+    # validated above
+    assert filter.column is not None
+    assert filter.op is not None
+
+    value = record.get(filter.column, _MISSING)
+
+    if filter.op == "exists":
+        return value is not _MISSING
+    if filter.op == "is_null":
+        return value is None
+    if filter.op == "not_null":
+        return value is not _MISSING and value is not None
+
+    if value is _MISSING:
+        return False
+
+    if filter.op == "eq":
+        return value == filter.value
+    if filter.op == "ne":
+        return value != filter.value
+    if filter.op == "in":
+        assert isinstance(filter.value, (list, tuple, set))
+        return value in filter.value
+    if filter.op == "not_in":
+        assert isinstance(filter.value, (list, tuple, set))
+        return value not in filter.value
+    if filter.op == "between":
+        assert isinstance(filter.value, (list, tuple))
+        low, high = filter.value
+        try:
+            return low <= value <= high
+        except TypeError:
+            return False
+    if filter.op == "contains":
+        if isinstance(value, str):
+            return isinstance(filter.value, str) and filter.value in value
+        if isinstance(value, (list, tuple, set)):
+            return filter.value in value
+        if isinstance(value, dict):
+            return filter.value in value
+        return False
+    if filter.op == "not_contains":
+        if isinstance(value, str):
+            return isinstance(filter.value, str) and filter.value not in value
+        if isinstance(value, (list, tuple, set)):
+            return filter.value not in value
+        if isinstance(value, dict):
+            return filter.value not in value
+        return False
+
+    try:
+        if filter.op == "gt":
+            return value > filter.value
+        if filter.op == "gte":
+            return value >= filter.value
+        if filter.op == "lt":
+            return value < filter.value
+        if filter.op == "lte":
+            return value <= filter.value
+    except TypeError:
+        return False
+
+    return False
 
 
 def _record_to_sample_hf(record: DatasetRecord, field_spec: HFFieldSpec) -> Sample:
