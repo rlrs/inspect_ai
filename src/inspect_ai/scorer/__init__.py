@@ -3,6 +3,7 @@ from inspect_ai._util.deprecation import relocated_module_attribute
 from ._answer import AnswerPattern, answer
 from ._choice import choice
 from ._classification import exact, f1
+from ._gleu import gleu
 from ._match import includes, match
 from ._metric import (
     CORRECT,
@@ -52,6 +53,7 @@ __all__ = [
     "pattern",
     "f1",
     "exact",
+    "gleu",
     "AnswerPattern",
     "Scorer",
     "Target",
