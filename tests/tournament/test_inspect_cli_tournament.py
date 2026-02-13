@@ -1,5 +1,3 @@
-import json
-
 from click.testing import CliRunner
 
 import inspect_ai._cli.tournament as tournament_cli
@@ -23,9 +21,10 @@ def test_inspect_tournament_run_command_dispatches(
     )
 
     assert result.exit_code == 0
-    payload = json.loads(result.output)
-    assert payload["batches_completed"] == 1
-    assert payload["status"]["run_status"] == "completed"
+    assert "Run Summary" in result.output
+    assert "Batches Completed" in result.output
+    assert "Tournament Status" in result.output
+    assert "completed" in result.output
 
 
 def test_inspect_help_lists_tournament_command() -> None:

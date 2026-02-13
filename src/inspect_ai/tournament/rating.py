@@ -21,6 +21,7 @@ class ModelStanding(BaseModel):
     """Model rating plus derived ranking fields."""
 
     model_id: str
+    model_name: str | None = None
     mu: float
     sigma: float
     games: int

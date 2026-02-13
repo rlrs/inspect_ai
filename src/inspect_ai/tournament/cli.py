@@ -1,11 +1,20 @@
 import argparse
-import json
 from typing import Sequence
 
+from ._cli_format import (
+    export_result_payload,
+    format_export_result,
+    format_generation_result,
+    format_run_result,
+    format_status,
+    generation_result_payload,
+    run_result_payload,
+    status_payload,
+    write_json_output,
+)
 from .exports import export_rankings
 from .generation import run_generation
 from .orchestrator import (
-    TournamentRunResult,
     resume_tournament,
     run_tournament,
     tournament_status,
@@ -26,51 +35,47 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "generate":
             models = args.models if args.models else None
             generation_result = run_generation(args.config, models=models)
-            print(
-                json.dumps(
-                    {
-                        "models": generation_result.models,
-                        "prompt_count": generation_result.prompt_count,
-                        "log_dir": generation_result.log_dir.as_posix(),
-                        "log_count": generation_result.log_count,
-                    },
-                    indent=2,
-                )
-            )
+            payload = generation_result_payload(generation_result)
+            output_path = write_json_output(payload, args.json_out)
+            print(format_generation_result(generation_result))
+            if output_path is not None:
+                print(f"\nSaved JSON output to {output_path.as_posix()}")
             return 0
 
         if args.command == "run":
             run_result = run_tournament(args.config, max_batches=args.max_batches)
-            _print_run_result(run_result)
+            payload = run_result_payload(run_result)
+            output_path = write_json_output(payload, args.json_out)
+            print(format_run_result(run_result))
+            if output_path is not None:
+                print(f"\nSaved JSON output to {output_path.as_posix()}")
             return 0
 
         if args.command == "resume":
             resume_result = resume_tournament(args.target, max_batches=args.max_batches)
-            _print_run_result(resume_result)
+            payload = run_result_payload(resume_result)
+            output_path = write_json_output(payload, args.json_out)
+            print(format_run_result(resume_result))
+            if output_path is not None:
+                print(f"\nSaved JSON output to {output_path.as_posix()}")
             return 0
 
         if args.command == "status":
             status = tournament_status(args.target)
-            print(status.model_dump_json(indent=2))
+            payload = status_payload(status)
+            output_path = write_json_output(payload, args.json_out)
+            print(format_status(status))
+            if output_path is not None:
+                print(f"\nSaved JSON output to {output_path.as_posix()}")
             return 0
 
         if args.command == "export":
             export_result = export_rankings(args.target, output_dir=args.output_dir)
-            print(
-                json.dumps(
-                    {
-                        "output_dir": export_result.output_dir.as_posix(),
-                        "rankings_json": export_result.rankings_json.as_posix(),
-                        "rankings_csv": export_result.rankings_csv.as_posix(),
-                        "pairwise_matrix_csv": (
-                            export_result.pairwise_matrix_csv.as_posix()
-                            if export_result.pairwise_matrix_csv is not None
-                            else None
-                        ),
-                    },
-                    indent=2,
-                )
-            )
+            payload = export_result_payload(export_result)
+            output_path = write_json_output(payload, args.json_out)
+            print(format_export_result(export_result))
+            if output_path is not None:
+                print(f"\nSaved JSON output to {output_path.as_posix()}")
             return 0
 
         parser.print_help()
@@ -99,6 +104,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Optional subset of contestant models",
     )
+    generate_parser.add_argument(
+        "--json-out",
+        default=None,
+        help="Optional path to save JSON output",
+    )
 
     run_parser = subparsers.add_parser("run", help="Run tournament from config")
     run_parser.add_argument("--config", required=True, help="Path to tournament config")
@@ -107,6 +117,11 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Optional max batches to execute before returning",
+    )
+    run_parser.add_argument(
+        "--json-out",
+        default=None,
+        help="Optional path to save JSON output",
     )
 
     resume_parser = subparsers.add_parser(
@@ -119,9 +134,19 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional max batches to execute before returning",
     )
+    resume_parser.add_argument(
+        "--json-out",
+        default=None,
+        help="Optional path to save JSON output",
+    )
 
     status_parser = subparsers.add_parser("status", help="Show tournament status")
     status_parser.add_argument("target", help="Config file path or state dir path")
+    status_parser.add_argument(
+        "--json-out",
+        default=None,
+        help="Optional path to save JSON output",
+    )
 
     export_parser = subparsers.add_parser("export", help="Export rankings artifacts")
     export_parser.add_argument("target", help="Config file path or state dir path")
@@ -130,23 +155,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional output directory for export files",
     )
+    export_parser.add_argument(
+        "--json-out",
+        default=None,
+        help="Optional path to save JSON output",
+    )
 
     return parser
-
-
-def _print_run_result(result: TournamentRunResult) -> None:
-    print(
-        json.dumps(
-            {
-                "batches_completed": result.batches_completed,
-                "matches_scheduled": result.matches_scheduled,
-                "outcomes_processed": result.outcomes_processed,
-                "outcomes_skipped": result.outcomes_skipped,
-                "status": result.status.model_dump(),
-            },
-            indent=2,
-        )
-    )
 
 
 if __name__ == "__main__":

@@ -254,6 +254,13 @@ class TournamentStore(AbstractContextManager["TournamentStore"]):
         row = cursor.fetchone()
         return str(row["model_id"]) if row is not None else None
 
+    def model_names_by_id(self) -> dict[str, str]:
+        """Load model names keyed by model_id."""
+        rows = self.connection().execute(
+            "SELECT model_id, model_name FROM models ORDER BY model_name"
+        ).fetchall()
+        return {str(row["model_id"]): str(row["model_name"]) for row in rows}
+
     def upsert_response(
         self,
         *,
@@ -430,14 +437,18 @@ class TournamentStore(AbstractContextManager["TournamentStore"]):
                   m.match_id,
                   m.batch_id,
                   m.round_index,
-                  m.model_a,
-                  m.model_b,
+                  m.model_a AS model_a_id,
+                  m.model_b AS model_b_id,
+                  ma.model_name AS model_a_name,
+                  mb.model_name AS model_b_name,
                   m.prompt_id,
                   m.status,
                   p.prompt_text,
                   ra.response_text AS response_a_text,
                   rb.response_text AS response_b_text
                 FROM matches m
+                JOIN models ma ON ma.model_id = m.model_a
+                JOIN models mb ON mb.model_id = m.model_b
                 JOIN prompts p ON p.prompt_id = m.prompt_id
                 JOIN responses ra ON ra.response_id = m.response_a_id
                 JOIN responses rb ON rb.response_id = m.response_b_id

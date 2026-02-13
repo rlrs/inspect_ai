@@ -49,11 +49,17 @@ def test_status_and_resume_work_from_state_dir(
     assert mid_status.run_status == "running"
     assert mid_status.rated_matches > 0
     assert mid_status.pending_batch_id is None
+    assert {standing.model_name for standing in mid_status.standings} == set(
+        config.contestant_models
+    )
 
     resume_tournament(config.state_dir)
     final_status = tournament_status(config.state_dir)
     assert final_status.run_status == "completed"
     assert len(final_status.stop_reasons) > 0
+    assert {standing.model_name for standing in final_status.standings} == set(
+        config.contestant_models
+    )
 
 
 def _patch_orchestrator(monkeypatch: object) -> None:

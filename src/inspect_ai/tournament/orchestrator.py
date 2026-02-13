@@ -298,8 +298,10 @@ def _judge_pending_matches(
             match_id=str(row["match_id"]),
             prompt_id=str(row["prompt_id"]),
             prompt=str(row["prompt_text"]),
-            model_a=str(row["model_a"]),
-            model_b=str(row["model_b"]),
+            model_a=str(row["model_a_name"]),
+            model_b=str(row["model_b_name"]),
+            model_a_id=str(row["model_a_id"]),
+            model_b_id=str(row["model_b_id"]),
             response_a=str(row["response_a_text"]),
             response_b=str(row["response_b_text"]),
         )
@@ -520,12 +522,19 @@ def _canonical_outcomes_for_batch(
 
 def _status_from_store(config: TournamentConfig, store: TournamentStore) -> TournamentStatus:
     ratings = store.load_model_ratings()
+    names_by_id = store.model_names_by_id()
     standings = summarize_ratings(
         ratings,
         params=config.rating_params,
         conservative_k=config.conservative_k,
         elo_scale=config.elo_scale,
     )
+    standings = [
+        standing.model_copy(
+            update={"model_name": names_by_id.get(standing.model_id, standing.model_id)}
+        )
+        for standing in standings
+    ]
     expected_responses = len(config.contestant_models) * len(config.prompts)
     response_count = store.table_count("responses")
     missing = max(0, expected_responses - response_count)

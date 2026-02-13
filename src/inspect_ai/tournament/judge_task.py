@@ -22,6 +22,8 @@ class JudgeMatch(BaseModel):
     prompt: str
     model_a: str
     model_b: str
+    model_a_id: str | None = None
+    model_b_id: str | None = None
     response_a: str
     response_b: str
     metadata: dict[str, JsonValue] | None = None
@@ -72,6 +74,10 @@ def build_judge_samples(
             "response_a": match.response_a,
             "response_b": match.response_b,
         }
+        if match.model_a_id is not None:
+            ab_metadata["model_a_id"] = match.model_a_id
+        if match.model_b_id is not None:
+            ab_metadata["model_b_id"] = match.model_b_id
         samples.append(
             Sample(
                 id=f"{match.match_id}:ab" if side_swap else match.match_id,
@@ -89,6 +95,10 @@ def build_judge_samples(
                 "response_a": match.response_b,
                 "response_b": match.response_a,
             }
+            if match.model_b_id is not None:
+                ba_metadata["model_a_id"] = match.model_b_id
+            if match.model_a_id is not None:
+                ba_metadata["model_b_id"] = match.model_a_id
             samples.append(
                 Sample(
                     id=f"{match.match_id}:ba",

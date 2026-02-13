@@ -22,7 +22,9 @@ def test_cli_run_dispatches_to_run_tournament(
 
     assert exit_code == 0
     output = capsys.readouterr().out
-    assert '"batches_completed": 1' in output
+    assert "Run Summary" in output
+    assert "Batches Completed" in output
+    assert "Tournament Status" in output
 
 
 def test_cli_status_dispatches_to_tournament_status(
@@ -34,7 +36,9 @@ def test_cli_status_dispatches_to_tournament_status(
 
     assert exit_code == 0
     output = capsys.readouterr().out
-    assert '"run_status": "completed"' in output
+    assert "Tournament Status" in output
+    assert "Run Status" in output
+    assert "completed" in output
 
 
 def test_cli_export_dispatches_to_export_rankings(
@@ -58,7 +62,37 @@ def test_cli_export_dispatches_to_export_rankings(
 
     assert exit_code == 0
     output = capsys.readouterr().out
-    assert '"rankings_json"' in output
+    assert "Export Artifacts" in output
+    assert "Rankings JSON" in output
+    assert "rankings.json" in output
+
+
+def test_cli_run_can_save_json_output(
+    tmp_path: Path, monkeypatch: object, capsys: object
+) -> None:
+    config_path = tmp_path / "tournament.yaml"
+    config_path.write_text("judge_model: x\n", encoding="utf-8")
+    json_out = tmp_path / "run.json"
+
+    monkeypatch.setattr(
+        tournament_cli,
+        "run_tournament",
+        lambda config, max_batches=None: _run_result(),
+    )
+    exit_code = tournament_cli.main(
+        [
+            "run",
+            "--config",
+            config_path.as_posix(),
+            "--json-out",
+            json_out.as_posix(),
+        ]
+    )
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "Saved JSON output to" in output
+    assert json_out.exists()
 
 
 def _status() -> TournamentStatus:

@@ -18,6 +18,8 @@ def test_build_judge_samples_side_swap_shapes_dataset() -> None:
         prompt="Prompt text",
         model_a="model/a",
         model_b="model/b",
+        model_a_id="model_aaa",
+        model_b_id="model_bbb",
         response_a="Response A",
         response_b="Response B",
     )
@@ -27,6 +29,14 @@ def test_build_judge_samples_side_swap_shapes_dataset() -> None:
     assert samples[1].id == "m-1:ba"
     assert samples[0].metadata and samples[0].metadata["side"] == "ab"
     assert samples[1].metadata and samples[1].metadata["side"] == "ba"
+    assert samples[0].metadata and samples[0].metadata["model_a"] == "model/a"
+    assert samples[0].metadata and samples[0].metadata["model_b"] == "model/b"
+    assert samples[0].metadata and samples[0].metadata["model_a_id"] == "model_aaa"
+    assert samples[0].metadata and samples[0].metadata["model_b_id"] == "model_bbb"
+    assert samples[1].metadata and samples[1].metadata["model_a"] == "model/b"
+    assert samples[1].metadata and samples[1].metadata["model_b"] == "model/a"
+    assert samples[1].metadata and samples[1].metadata["model_a_id"] == "model_bbb"
+    assert samples[1].metadata and samples[1].metadata["model_b_id"] == "model_aaa"
 
 
 def test_run_judge_batch_parses_side_swapped_decisions_deterministically(
