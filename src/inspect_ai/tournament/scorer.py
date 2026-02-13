@@ -9,7 +9,12 @@ from inspect_ai.solver import TaskState
 
 from .types import Decision, InvalidPolicy
 
-DECISION_PATTERN = re.compile(r"^DECISION:\s*(A|B|TIE|INVALID)\s*$", re.IGNORECASE)
+DECISION_PATTERN = re.compile(
+    r"^(?:FINAL\s+)?DECISION\s*[:=\-\u2013\u2014]\s*(A|B|TIE|INVALID)\.?\s*$",
+    re.IGNORECASE,
+)
+MARKDOWN_PREFIX_PATTERN = re.compile(r"^(?:[-*+]\s+|>\s+|#{1,6}\s+|\d+\.\s+)")
+MARKDOWN_STYLE_PATTERN = re.compile(r"(?:\*\*|__|\*|_|`)")
 
 
 class ParsedJudgeDecision(BaseModel):
@@ -104,22 +109,30 @@ def parse_judge_decision(text: str) -> ParsedJudgeDecision:
             decision="INVALID", valid=False, parse_error="empty_completion"
         )
 
-    decision_lines = [line for line in non_empty_lines if DECISION_PATTERN.match(line)]
-    if len(decision_lines) == 0:
+    decision_matches = [
+        (line, DECISION_PATTERN.match(_normalize_decision_line(line)))
+        for line in non_empty_lines
+    ]
+    decision_matches = [
+        (line, decision_match)
+        for line, decision_match in decision_matches
+        if decision_match is not None
+    ]
+    if len(decision_matches) == 0:
         return ParsedJudgeDecision(
             decision="INVALID",
             valid=False,
             parse_error="missing_terminal_decision",
         )
 
-    if len(decision_lines) != 1:
+    if len(decision_matches) != 1:
         return ParsedJudgeDecision(
             decision="INVALID",
             valid=False,
             parse_error="multiple_decision_lines",
         )
 
-    decision_match = DECISION_PATTERN.match(decision_lines[0])
+    decision_line, decision_match = decision_matches[0]
     if decision_match is None:
         return ParsedJudgeDecision(
             decision="INVALID",
@@ -140,8 +153,19 @@ def parse_judge_decision(text: str) -> ParsedJudgeDecision:
         decision=decision,
         valid=True,
         parse_error=None,
-        decision_line=decision_lines[0],
+        decision_line=decision_line,
     )
+
+
+def _normalize_decision_line(line: str) -> str:
+    normalized = line.strip()
+    while True:
+        stripped = MARKDOWN_PREFIX_PATTERN.sub("", normalized, count=1).lstrip()
+        if stripped == normalized:
+            break
+        normalized = stripped
+    normalized = MARKDOWN_STYLE_PATTERN.sub("", normalized)
+    return normalized.strip()
 
 
 def canonicalize_side_decision(

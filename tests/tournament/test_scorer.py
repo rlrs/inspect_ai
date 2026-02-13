@@ -23,6 +23,21 @@ def test_parse_judge_decision_accepts_single_non_terminal_decision_line() -> Non
     assert parsed.parse_error is None
 
 
+def test_parse_judge_decision_accepts_markdown_styled_lines() -> None:
+    cases = [
+        ("**DECISION:** b", "B"),
+        ("- **DECISION:** `A`", "A"),
+        ("### Decision - tie", "TIE"),
+        ("> __DECISION__: INVALID.", "INVALID"),
+        ("`DECISION: B`", "B"),
+    ]
+    for decision_line, expected in cases:
+        parsed = parse_judge_decision(f"Reasoning.\n{decision_line}")
+        assert parsed.valid is True
+        assert parsed.decision == expected
+        assert parsed.parse_error is None
+
+
 def test_parse_judge_decision_rejects_multiple_decision_lines() -> None:
     parsed = parse_judge_decision(
         "First:\nDECISION: A\nSecond:\nDECISION: A"
