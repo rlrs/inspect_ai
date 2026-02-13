@@ -46,6 +46,22 @@ def test_indexing_reports_missing_coverage_and_is_idempotent(tmp_path: Path) -> 
         assert store.table_count("responses") == 2
 
 
+def test_generation_runs_eval_set_per_model(tmp_path: Path, monkeypatch) -> None:
+    config = build_config(tmp_path)
+    calls: list[str] = []
+
+    def fake_eval_set(**kwargs):
+        calls.append(str(kwargs["model"]))
+        return True, []
+
+    monkeypatch.setattr("inspect_ai.tournament.generation.eval_set", fake_eval_set)
+
+    result = run_generation(config)
+
+    assert result.models == ["mockllm/model", "mockllm/model2"]
+    assert calls == ["mockllm/model", "mockllm/model2"]
+
+
 def build_config(tmp_path: Path) -> TournamentConfig:
     return TournamentConfig.model_validate(
         {
