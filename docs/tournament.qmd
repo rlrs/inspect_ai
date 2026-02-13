@@ -1,0 +1,84 @@
+---
+title: Tournament Evaluations
+---
+
+## Overview
+
+Tournament evaluations rank models from pairwise judgments with incremental TrueSkill updates. The workflow separates:
+
+1. Generation of contestant outputs for prompts
+2. Pairwise judging of scheduled matches
+3. Rating and convergence checks
+
+Tournament state is stored in a portable directory (`state_dir`) backed by SQLite plus normal Inspect eval logs.
+
+## Config
+
+Tournament runs are configured with a YAML file. Core fields:
+
+- `completion_log_dir`: generation log output
+- `log_dir`: judge and export logs
+- `state_dir`: persistent tournament DB location (defaults to `<log_dir>/state`)
+- `contestant_models`: initial model pool
+- `prompts`: prompt list
+- `rating_params`: TrueSkill parameters
+- `batch_size`, `max_total_matches`, `p_stop`, `epsilon`: scheduling/stop controls
+- `judge_model`, `judge_prompt_template`: judge setup
+
+Example: `creative_writing_tournament.yaml`
+
+## CLI Workflow
+
+Initialize state:
+
+```bash
+inspect tournament init tournament.yaml
+```
+
+Generate contestant outputs:
+
+```bash
+inspect tournament generate tournament.yaml
+```
+
+Run tournament loop:
+
+```bash
+inspect tournament run tournament.yaml
+```
+
+Inspect status and export rankings:
+
+```bash
+inspect tournament status logs/tournament/creative_writing/state
+inspect tournament export logs/tournament/creative_writing/state
+```
+
+## Add Models After Initial Run
+
+Add one or more models without restarting from scratch:
+
+```bash
+inspect tournament add-model logs/tournament/creative_writing/state \
+  --model hf/google/gemma-3-12b-it \
+  --model hf/meta-llama/Llama-3.3-70B-Instruct
+```
+
+`add-model` updates persisted tournament config, initializes ratings for new models, generates/indexes missing responses, and resumes scheduling/judging.
+
+## Python API
+
+```python
+from inspect_ai.tournament import (
+    run_tournament,
+    resume_tournament,
+    add_models,
+    tournament_status,
+    export_rankings,
+)
+
+run_tournament("tournament.yaml")
+add_models("logs/tournament/creative_writing/state", models=["hf/google/gemma-3-12b-it"])
+status = tournament_status("logs/tournament/creative_writing/state")
+export_rankings("logs/tournament/creative_writing/state")
+```

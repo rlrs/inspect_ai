@@ -112,6 +112,7 @@ website:
          - section: "Advanced"
            contents:
                - eval-sets.qmd
+               - tournament.qmd
                - text: "Errors & Limits"
                  href: errors-and-limits.qmd
                - typing.qmd
