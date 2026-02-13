@@ -3,6 +3,7 @@ from pathlib import Path
 import click
 
 from inspect_ai.tournament import (
+    add_models,
     export_rankings,
     resume_tournament,
     run_generation,
@@ -10,7 +11,9 @@ from inspect_ai.tournament import (
     tournament_status,
 )
 from inspect_ai.tournament._cli_format import (
+    add_models_result_payload,
     export_result_payload,
+    format_add_models_result,
     format_export_result,
     format_generation_result,
     format_run_result,
@@ -112,6 +115,43 @@ def tournament_resume_command(
     payload = run_result_payload(result)
     output_path = write_json_output(payload, json_out)
     click.echo(format_run_result(result))
+    if output_path is not None:
+        click.echo(f"\nSaved JSON output to {output_path.as_posix()}")
+
+
+@tournament_command.command("add-model")
+@click.argument("target", type=str)
+@click.option(
+    "--model",
+    "models",
+    multiple=True,
+    required=True,
+    type=str,
+    help="Model name to add (repeat for multiple models).",
+)
+@click.option(
+    "--max-batches",
+    type=int,
+    default=None,
+    help="Optional max number of batches to execute before returning.",
+)
+@click.option(
+    "--json-out",
+    type=str,
+    default=None,
+    help="Optional path to save JSON output.",
+)
+def tournament_add_model_command(
+    target: str,
+    models: tuple[str, ...],
+    max_batches: int | None,
+    json_out: str | None,
+) -> None:
+    """Add one or more models to an existing tournament."""
+    result = add_models(target, models=list(models), max_batches=max_batches)
+    payload = add_models_result_payload(result)
+    output_path = write_json_output(payload, json_out)
+    click.echo(format_add_models_result(result))
     if output_path is not None:
         click.echo(f"\nSaved JSON output to {output_path.as_posix()}")
 

@@ -4,7 +4,7 @@ from typing import Any, Sequence
 
 from .exports import ExportResult
 from .generation import GenerationRunResult
-from .orchestrator import TournamentRunResult, TournamentStatus
+from .orchestrator import AddModelsResult, TournamentRunResult, TournamentStatus
 from .rating import ModelStanding
 
 
@@ -24,6 +24,16 @@ def run_result_payload(result: TournamentRunResult) -> dict[str, Any]:
         "outcomes_processed": result.outcomes_processed,
         "outcomes_skipped": result.outcomes_skipped,
         "status": status_payload(result.status),
+    }
+
+
+def add_models_result_payload(result: AddModelsResult) -> dict[str, Any]:
+    return {
+        "requested_models": result.requested_models,
+        "added_models": result.added_models,
+        "already_present_models": result.already_present_models,
+        "generated_models": result.generated_models,
+        "run": run_result_payload(result.run),
     }
 
 
@@ -94,6 +104,33 @@ def format_run_result(result: TournamentRunResult) -> str:
         )
     )
     lines.append(format_status(result.status, title="Tournament Status"))
+    return "\n\n".join(lines)
+
+
+def format_add_models_result(result: AddModelsResult) -> str:
+    lines: list[str] = []
+    lines.append(
+        _format_key_value_table(
+            "Add Models Summary",
+            [
+                ("Requested", str(len(result.requested_models))),
+                ("Added", str(len(result.added_models))),
+                ("Already Present", str(len(result.already_present_models))),
+                ("Generated", str(len(result.generated_models))),
+            ],
+        )
+    )
+    lines.append(
+        _format_table(
+            "Added Models",
+            ["#", "Model Name"],
+            [[str(index), name] for index, name in enumerate(result.added_models, start=1)],
+            align_right={0},
+        )
+        if len(result.added_models) > 0
+        else "Added Models\n(no rows)"
+    )
+    lines.append(format_run_result(result.run))
     return "\n\n".join(lines)
 
 

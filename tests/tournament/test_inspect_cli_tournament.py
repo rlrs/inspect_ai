@@ -2,7 +2,11 @@ from click.testing import CliRunner
 
 import inspect_ai._cli.tournament as tournament_cli
 from inspect_ai._cli.main import inspect
-from inspect_ai.tournament.orchestrator import TournamentRunResult, TournamentStatus
+from inspect_ai.tournament.orchestrator import (
+    AddModelsResult,
+    TournamentRunResult,
+    TournamentStatus,
+)
 
 
 def test_inspect_tournament_run_command_dispatches(
@@ -34,6 +38,38 @@ def test_inspect_help_lists_tournament_command() -> None:
     assert "tournament" in result.output
 
 
+def test_inspect_tournament_add_model_command_dispatches(
+    monkeypatch: object,
+) -> None:
+    monkeypatch.setattr(
+        tournament_cli,
+        "add_models",
+        lambda target, models, max_batches=None: _add_models_result(models),
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        inspect,
+        [
+            "tournament",
+            "add-model",
+            "/tmp/state",
+            "--model",
+            "model/c",
+            "--model",
+            "model/d",
+            "--max-batches",
+            "1",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Add Models Summary" in result.output
+    assert "Added Models" in result.output
+    assert "model/c" in result.output
+    assert "Tournament Status" in result.output
+
+
 def _run_result() -> TournamentRunResult:
     return TournamentRunResult(
         batches_completed=1,
@@ -59,4 +95,14 @@ def _run_result() -> TournamentRunResult:
             rated_matches=2,
             standings=[],
         ),
+    )
+
+
+def _add_models_result(models: list[str]) -> AddModelsResult:
+    return AddModelsResult(
+        requested_models=models,
+        added_models=models,
+        already_present_models=[],
+        generated_models=models,
+        run=_run_result(),
     )

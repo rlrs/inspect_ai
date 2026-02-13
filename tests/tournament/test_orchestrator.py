@@ -6,6 +6,8 @@ import inspect_ai.tournament.orchestrator as orchestrator_module
 from inspect_ai.scorer import Score
 from inspect_ai.tournament import (
     TournamentConfig,
+    TournamentStore,
+    add_models,
     resume_tournament,
     run_tournament,
     tournament_status,
@@ -60,6 +62,42 @@ def test_status_and_resume_work_from_state_dir(
     assert {standing.model_name for standing in final_status.standings} == set(
         config.contestant_models
     )
+
+
+def test_add_models_updates_persisted_config_and_status(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    _patch_orchestrator(monkeypatch)
+    config = build_config(tmp_path / "add-models")
+
+    run_tournament(config, max_batches=1)
+    add_result = add_models(config.state_dir, models=["model/d"], max_batches=1)
+
+    assert add_result.requested_models == ["model/d"]
+    assert add_result.added_models == ["model/d"]
+    assert add_result.already_present_models == []
+    assert "model/d" in {standing.model_name for standing in add_result.status.standings}
+
+    with TournamentStore(config.state_dir) as store:
+        config_json = store.get_run_state("config_json")
+        assert config_json is not None
+        persisted = TournamentConfig.model_validate_json(config_json)
+        assert persisted.contestant_models == ["model/a", "model/b", "model/c", "model/d"]
+
+
+def test_add_models_is_idempotent_for_existing_models(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    _patch_orchestrator(monkeypatch)
+    config = build_config(tmp_path / "add-models-idempotent")
+
+    run_tournament(config, max_batches=1)
+    first = add_models(config.state_dir, models=["model/d"], max_batches=1)
+    second = add_models(config.state_dir, models=["model/d"], max_batches=1)
+
+    assert first.added_models == ["model/d"]
+    assert second.added_models == []
+    assert second.already_present_models == ["model/d"]
 
 
 def _patch_orchestrator(monkeypatch: object) -> None:

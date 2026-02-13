@@ -12,6 +12,7 @@ from inspect_ai.dataset import Sample
 from inspect_ai.log import EvalLog
 from inspect_ai.model import GenerateConfig, Model, get_model
 
+from ._trace import tournament_trace_file
 from .config import TournamentConfig, load_tournament_config
 from .types import default_project_id
 
@@ -81,25 +82,26 @@ def run_generation(
     }
     model_args = _resolve_env_model_args()
     logs: list[EvalLog] = []
-    for model_name in selected_models:
-        model = get_model(model_name, **(model_args | {"memoize": False}))
-        try:
-            success, model_logs = eval_set(
-                tasks=task,
-                model=model,
-                log_dir=parsed.completion_log_dir.as_posix(),
-                metadata=metadata,
-                score=False,
-                log_dir_allow_dirty=True,
-            )
-            logs.extend(model_logs)
-            if not success:
-                raise RuntimeError(
-                    "Generation run did not complete successfully for model "
-                    + f"'{model_name}'"
+    with tournament_trace_file(parsed.log_dir, GENERATION_PHASE):
+        for model_name in selected_models:
+            model = get_model(model_name, **(model_args | {"memoize": False}))
+            try:
+                success, model_logs = eval_set(
+                    tasks=task,
+                    model=model,
+                    log_dir=parsed.completion_log_dir.as_posix(),
+                    metadata=metadata,
+                    score=False,
+                    log_dir_allow_dirty=True,
                 )
-        finally:
-            _close_model(model)
+                logs.extend(model_logs)
+                if not success:
+                    raise RuntimeError(
+                        "Generation run did not complete successfully for model "
+                        + f"'{model_name}'"
+                    )
+            finally:
+                _close_model(model)
 
     return GenerationRunResult(
         models=selected_models,

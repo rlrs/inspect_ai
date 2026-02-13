@@ -16,8 +16,10 @@ from .judge_task import (
     run_judge_batch,
 )
 from .orchestrator import (
+    AddModelsResult,
     TournamentRunResult,
     TournamentStatus,
+    add_models,
     resume_tournament,
     run_tournament,
     tournament_status,
@@ -76,6 +78,7 @@ __all__ = [
     "ExportResult",
     "JudgeMatch",
     "JudgeRunResult",
+    "AddModelsResult",
     "TournamentRunResult",
     "TournamentStatus",
     "MatchOutcome",
@@ -124,5 +127,6 @@ __all__ = [
     "response_id",
     "resume_tournament",
     "run_tournament",
+    "add_models",
     "tournament_status",
 ]

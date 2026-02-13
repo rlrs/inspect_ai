@@ -10,6 +10,7 @@ from inspect_ai.model import GenerateConfig, Model, get_model
 from inspect_ai.solver import Generate, TaskState, solver
 from inspect_ai.solver._solver import Solver
 
+from ._trace import tournament_trace_file
 from .config import TournamentConfig, load_tournament_config
 from .scorer import pairwise_judge
 
@@ -144,14 +145,15 @@ def run_judge_batch(
     )
 
     grader = _resolve_grader_model(parsed, grader_model)
-    logs = eval(
-        tasks=task,
-        model=parsed.judge_model,
-        model_roles={"grader": grader},
-        log_dir=judge_log_dir.as_posix(),
-        epochs=Epochs(1, []),
-        max_samples=parsed.judge_max_samples,
-    )
+    with tournament_trace_file(parsed.log_dir, "judge"):
+        logs = eval(
+            tasks=task,
+            model=parsed.judge_model,
+            model_roles={"grader": grader},
+            log_dir=judge_log_dir.as_posix(),
+            epochs=Epochs(1, []),
+            max_samples=parsed.judge_max_samples,
+        )
     failed_logs = [log for log in logs if log.status != "success"]
     if len(failed_logs) > 0:
         raise RuntimeError(

@@ -2,7 +2,11 @@ from pathlib import Path
 
 import inspect_ai.tournament.cli as tournament_cli
 from inspect_ai.tournament.exports import ExportResult
-from inspect_ai.tournament.orchestrator import TournamentRunResult, TournamentStatus
+from inspect_ai.tournament.orchestrator import (
+    AddModelsResult,
+    TournamentRunResult,
+    TournamentStatus,
+)
 
 
 def test_cli_run_dispatches_to_run_tournament(
@@ -95,6 +99,36 @@ def test_cli_run_can_save_json_output(
     assert json_out.exists()
 
 
+def test_cli_add_model_dispatches_to_add_models(
+    monkeypatch: object, capsys: object
+) -> None:
+    monkeypatch.setattr(
+        tournament_cli,
+        "add_models",
+        lambda target, models, max_batches=None: _add_models_result(models),
+    )
+
+    exit_code = tournament_cli.main(
+        [
+            "add-model",
+            "/tmp/state",
+            "--model",
+            "model/c",
+            "--model",
+            "model/d",
+            "--max-batches",
+            "1",
+        ]
+    )
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "Add Models Summary" in output
+    assert "Added Models" in output
+    assert "model/c" in output
+    assert "Tournament Status" in output
+
+
 def _status() -> TournamentStatus:
     return TournamentStatus(
         project_id="project_123",
@@ -124,4 +158,14 @@ def _run_result() -> TournamentRunResult:
         outcomes_processed=2,
         outcomes_skipped=0,
         status=_status(),
+    )
+
+
+def _add_models_result(models: list[str]) -> AddModelsResult:
+    return AddModelsResult(
+        requested_models=models,
+        added_models=models,
+        already_present_models=[],
+        generated_models=models,
+        run=_run_result(),
     )

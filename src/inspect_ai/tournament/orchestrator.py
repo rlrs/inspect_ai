@@ -67,6 +67,20 @@ class TournamentRunResult(BaseModel):
     status: TournamentStatus
 
 
+class AddModelsResult(BaseModel):
+    """Result of adding new models and resuming tournament execution."""
+
+    requested_models: list[str]
+    added_models: list[str]
+    already_present_models: list[str]
+    generated_models: list[str]
+    run: TournamentRunResult
+
+    @property
+    def status(self) -> TournamentStatus:
+        return self.run.status
+
+
 def run_tournament(
     config: TournamentConfig | Mapping[str, Any] | str | Path,
     *,
@@ -99,6 +113,68 @@ def resume_tournament(
         return _run_loop(parsed, store, max_batches=max_batches)
 
 
+def add_models(
+    config_or_state: TournamentConfig | Mapping[str, Any] | str | Path,
+    *,
+    models: Sequence[str],
+    max_batches: int | None = None,
+) -> AddModelsResult:
+    """Add models to an existing tournament and continue the run loop."""
+    requested_models = _normalize_model_names(models)
+    if len(requested_models) == 0:
+        raise ValueError("At least one non-empty model name is required.")
+
+    parsed = _resolve_config(config_or_state)
+    state_dir = _require_state_dir(parsed)
+    with TournamentStore(state_dir) as store:
+        persisted_config = _stored_config(store)
+        base_config = persisted_config if persisted_config is not None else parsed
+        store.initialize_from_config(base_config)
+        _set_run_state_defaults(store, base_config)
+
+        existing_models = set(base_config.contestant_models)
+        already_present = [name for name in requested_models if name in existing_models]
+        new_models = [name for name in requested_models if name not in existing_models]
+
+        updated_config = (
+            base_config.model_copy(
+                update={
+                    "contestant_models": [
+                        *base_config.contestant_models,
+                        *new_models,
+                    ]
+                }
+            )
+            if len(new_models) > 0
+            else base_config
+        )
+        store.initialize_from_config(updated_config)
+
+        with store.transaction():
+            store.set_run_state("config_json", updated_config.model_dump_json(), commit=False)
+            store.set_run_state("run_status", RUN_STATUS_RUNNING, commit=False)
+            store.set_run_state("stable_batches", "0", commit=False)
+            store.set_run_state("converged", "0", commit=False)
+            store.set_run_state("stop_reasons", "[]", commit=False)
+
+        coverage_before = index_generation_responses(updated_config, store=store)
+        generated_models = sorted(
+            model_name
+            for model_name, prompt_ids in coverage_before.missing_by_model.items()
+            if len(prompt_ids) > 0
+        )
+        _ensure_response_coverage(updated_config, store, force_regenerate=False)
+
+        run = _run_loop(updated_config, store, max_batches=max_batches)
+        return AddModelsResult(
+            requested_models=requested_models,
+            added_models=new_models,
+            already_present_models=already_present,
+            generated_models=generated_models,
+            run=run,
+        )
+
+
 def tournament_status(
     config_or_state: TournamentConfig | Mapping[str, Any] | str | Path,
 ) -> TournamentStatus:
@@ -129,6 +205,28 @@ def _resolve_config(
                     "and no config_json was found in run_state."
                 ) from None
         return TournamentConfig.model_validate_json(config_json)
+
+
+def _stored_config(store: TournamentStore) -> TournamentConfig | None:
+    config_json = store.get_run_state("config_json")
+    if config_json is None or config_json.strip() == "":
+        return None
+    try:
+        return TournamentConfig.model_validate_json(config_json)
+    except Exception:
+        return None
+
+
+def _normalize_model_names(models: Sequence[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for model_name in models:
+        value = model_name.strip()
+        if value == "" or value in seen:
+            continue
+        seen.add(value)
+        normalized.append(value)
+    return normalized
 
 
 def _set_run_state_defaults(store: TournamentStore, config: TournamentConfig) -> None:

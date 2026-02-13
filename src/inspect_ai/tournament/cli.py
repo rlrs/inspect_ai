@@ -2,7 +2,9 @@ import argparse
 from typing import Sequence
 
 from ._cli_format import (
+    add_models_result_payload,
     export_result_payload,
+    format_add_models_result,
     format_export_result,
     format_generation_result,
     format_run_result,
@@ -15,6 +17,7 @@ from ._cli_format import (
 from .exports import export_rankings
 from .generation import run_generation
 from .orchestrator import (
+    add_models,
     resume_tournament,
     run_tournament,
     tournament_status,
@@ -56,6 +59,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             payload = run_result_payload(resume_result)
             output_path = write_json_output(payload, args.json_out)
             print(format_run_result(resume_result))
+            if output_path is not None:
+                print(f"\nSaved JSON output to {output_path.as_posix()}")
+            return 0
+
+        if args.command == "add-model":
+            add_result = add_models(
+                args.target,
+                models=args.models,
+                max_batches=args.max_batches,
+            )
+            payload = add_models_result_payload(add_result)
+            output_path = write_json_output(payload, args.json_out)
+            print(format_add_models_result(add_result))
             if output_path is not None:
                 print(f"\nSaved JSON output to {output_path.as_posix()}")
             return 0
@@ -135,6 +151,33 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional max batches to execute before returning",
     )
     resume_parser.add_argument(
+        "--json-out",
+        default=None,
+        help="Optional path to save JSON output",
+    )
+
+    add_model_parser = subparsers.add_parser(
+        "add-model", help="Add one or more models to an existing tournament"
+    )
+    add_model_parser.add_argument(
+        "target",
+        help="Tournament state directory path (or config/state target)",
+    )
+    add_model_parser.add_argument(
+        "--model",
+        "--models",
+        dest="models",
+        action="append",
+        required=True,
+        help="Model name to add (repeat for multiple models)",
+    )
+    add_model_parser.add_argument(
+        "--max-batches",
+        type=int,
+        default=None,
+        help="Optional max batches to execute before returning",
+    )
+    add_model_parser.add_argument(
         "--json-out",
         default=None,
         help="Optional path to save JSON output",
