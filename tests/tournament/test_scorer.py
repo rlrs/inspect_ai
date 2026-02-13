@@ -14,13 +14,13 @@ def test_parse_judge_decision_accepts_single_terminal_decision_line() -> None:
     assert parsed.parse_error is None
 
 
-def test_parse_judge_decision_requires_terminal_decision_line() -> None:
+def test_parse_judge_decision_accepts_single_non_terminal_decision_line() -> None:
     parsed = parse_judge_decision(
         "DECISION: A\nTrailing line makes this invalid."
     )
-    assert parsed.valid is False
-    assert parsed.decision == "INVALID"
-    assert parsed.parse_error == "missing_terminal_decision"
+    assert parsed.valid is True
+    assert parsed.decision == "A"
+    assert parsed.parse_error is None
 
 
 def test_parse_judge_decision_rejects_multiple_decision_lines() -> None:
@@ -30,6 +30,15 @@ def test_parse_judge_decision_rejects_multiple_decision_lines() -> None:
     assert parsed.valid is False
     assert parsed.decision == "INVALID"
     assert parsed.parse_error == "multiple_decision_lines"
+
+
+def test_parse_judge_decision_rejects_score_label_format() -> None:
+    parsed = parse_judge_decision(
+        "Explanation:\nResponse A is stronger.\nScore\nB"
+    )
+    assert parsed.valid is False
+    assert parsed.decision == "INVALID"
+    assert parsed.parse_error == "missing_terminal_decision"
 
 
 def test_reconcile_side_swap_resolves_consistency_and_disagreement() -> None:

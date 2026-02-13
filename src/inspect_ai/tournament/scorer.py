@@ -97,23 +97,21 @@ def pairwise_judge(
 
 
 def parse_judge_decision(text: str) -> ParsedJudgeDecision:
-    """Strictly parse judge completion into A/B/TIE/INVALID."""
+    """Parse judge completion into A/B/TIE/INVALID."""
     non_empty_lines = [line.strip() for line in text.splitlines() if line.strip() != ""]
     if len(non_empty_lines) == 0:
         return ParsedJudgeDecision(
             decision="INVALID", valid=False, parse_error="empty_completion"
         )
 
-    terminal_line = non_empty_lines[-1]
-    terminal_match = DECISION_PATTERN.match(terminal_line)
-    if terminal_match is None:
+    decision_lines = [line for line in non_empty_lines if DECISION_PATTERN.match(line)]
+    if len(decision_lines) == 0:
         return ParsedJudgeDecision(
             decision="INVALID",
             valid=False,
             parse_error="missing_terminal_decision",
         )
 
-    decision_lines = [line for line in non_empty_lines if DECISION_PATTERN.match(line)]
     if len(decision_lines) != 1:
         return ParsedJudgeDecision(
             decision="INVALID",
@@ -121,7 +119,15 @@ def parse_judge_decision(text: str) -> ParsedJudgeDecision:
             parse_error="multiple_decision_lines",
         )
 
-    decision_str = terminal_match.group(1).upper()
+    decision_match = DECISION_PATTERN.match(decision_lines[0])
+    if decision_match is None:
+        return ParsedJudgeDecision(
+            decision="INVALID",
+            valid=False,
+            parse_error="missing_terminal_decision",
+        )
+
+    decision_str = decision_match.group(1).upper()
     if decision_str == "A":
         decision: Decision = "A"
     elif decision_str == "B":
@@ -131,7 +137,10 @@ def parse_judge_decision(text: str) -> ParsedJudgeDecision:
     else:
         decision = "INVALID"
     return ParsedJudgeDecision(
-        decision=decision, valid=True, parse_error=None, decision_line=terminal_line
+        decision=decision,
+        valid=True,
+        parse_error=None,
+        decision_line=decision_lines[0],
     )
 
 
