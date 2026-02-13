@@ -11,6 +11,7 @@ from .list import list_command
 from .log import log_command
 from .sandbox import sandbox_command
 from .score import score_command
+from .tournament import tournament_command
 from .trace import trace_command
 from .view import view_command
 
@@ -48,6 +49,7 @@ inspect.add_command(score_command)
 inspect.add_command(view_command)
 inspect.add_command(sandbox_command)
 inspect.add_command(trace_command)
+inspect.add_command(tournament_command)
 
 
 def main() -> None:
