@@ -6,6 +6,7 @@ import random
 import socket
 import subprocess
 import time
+from collections import deque
 from typing import Any, Dict, Optional, Tuple
 
 import httpx
@@ -15,10 +16,43 @@ logger = logging.getLogger(__name__)
 
 # Global dictionary to keep track of process -> reserved port mappings
 process_socket_map: dict[subprocess.Popen[str], socket.socket] = {}
+process_output_map: dict[subprocess.Popen[str], deque[str]] = {}
+
+MAX_PROCESS_OUTPUT_LINES = 200
+ERROR_OUTPUT_TAIL_LINES = 40
 
 DEFAULT_RETRY_DELAY = 5
 
 DEFAULT_TIMEOUT = 60 * 10  # fairly conservative default timeout of 10 minutes
+
+
+def record_process_output(
+    process: subprocess.Popen[str], stream: str, line: str
+) -> None:
+    line = line.strip()
+    if not line:
+        return
+
+    if process not in process_output_map:
+        process_output_map[process] = deque(maxlen=MAX_PROCESS_OUTPUT_LINES)
+
+    process_output_map[process].append(f"[{stream}] {line}")
+
+
+def append_recent_process_output(
+    error_msg: str,
+    process: subprocess.Popen[str],
+    max_lines: int = ERROR_OUTPUT_TAIL_LINES,
+) -> str:
+    recent_output = process_output_map.get(process)
+    if not recent_output:
+        return error_msg
+
+    output_tail = "\n".join(list(recent_output)[-max_lines:])
+    if not output_tail:
+        return error_msg
+
+    return f"{error_msg}\n\nRecent server output:\n{output_tail}"
 
 
 def reserve_port(
@@ -106,6 +140,7 @@ def execute_shell_command(
         bufsize=1,  # Line buffered
         env=process_env,  # Pass the environment variables
     )
+    process_output_map[process] = deque(maxlen=MAX_PROCESS_OUTPUT_LINES)
 
     # Set up background thread to read and log stdout
     def log_output() -> None:
@@ -113,6 +148,7 @@ def execute_shell_command(
             return
         for line in iter(process.stdout.readline, ""):
             if line:
+                record_process_output(process, "stdout", line)
                 logger.debug(line.strip())
         process.stdout.close()
 
@@ -122,6 +158,7 @@ def execute_shell_command(
             return
         for line in iter(process.stderr.readline, ""):
             if line:
+                record_process_output(process, "stderr", line)
                 logger.info(line.strip())
         process.stderr.close()
 
@@ -205,6 +242,7 @@ def terminate_process(process: subprocess.Popen[str]) -> None:
     lock_socket = process_socket_map.pop(process, None)
     if lock_socket is not None:
         release_port(lock_socket)
+    process_output_map.pop(process, None)
 
 
 def wait_for_server(
@@ -239,6 +277,7 @@ def wait_for_server(
         # Check for timeout first
         if timeout and time.time() - start_time > timeout:
             error_msg = f"Server did not become ready within timeout period ({timeout} seconds). Try increasing the timeout with '-M timeout=...'. {debug_advice}"
+            error_msg = append_recent_process_output(error_msg, process)
             logger.error(error_msg)
             raise TimeoutError(error_msg)
 
@@ -246,6 +285,7 @@ def wait_for_server(
         if process.poll() is not None:
             exit_code = process.poll()
             error_msg = f"Server process exited unexpectedly with code {exit_code}. {debug_advice}"
+            error_msg = append_recent_process_output(error_msg, process)
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
