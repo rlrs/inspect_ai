@@ -1,10 +1,15 @@
 ## Unreleased
 
-- Analysis: Async reading of logs/samples in `samples_df()`. Improves reading summary samples from ~114 minutes to ~15 seconds for ~600 files. 
+- Agent Bridge: Google Gemini API is now supported for in-process and sandbox bridges.
 - Task Execution: Cancelled samples are now logged in the same fashion as samples with errors.
+- Analysis: Async reading of logs/samples in `samples_df()` (now 50x faster).
 - Sandboxes: Don't require Docker compatible sandboxes to implement `config_deserialize()`.
-- Limits: New `cost_limit()` context manager for scoped application of cost limits (can also be applied directly samples or agents).
+- Sandboxes: New `exec_remote()` method for async execution of long-running commands.
+- Limits: New `cost_limit()` context manager for scoped application of cost limits.
+- Performance: Disable expensive per-sample options when running high-throughput workloads.
+- Events: Rename `EventNode` to `EventTreeNode` and `SpanNode` to `EventTreeSpan` (old type names will still work at runtime with a deprecation warning).
 - Inspect View: Make samples in task detail sortable, inline epoch filter.
+- Bugfix: Shield sandbox cleanup after cancelled exception.
 
 ## 0.3.179 (12 February 2026)
 
